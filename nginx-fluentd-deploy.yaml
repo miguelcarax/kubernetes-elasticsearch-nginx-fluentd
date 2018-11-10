@@ -1,0 +1,61 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app: nginx
+  name: nginx
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+      - image: nginx
+        name: nginx
+        volumeMounts:
+          - name: nginx-log
+            mountPath: /var/log/nginx/
+
+      - image: miguelcarax/fluentd-elasticsearch
+        name: fluentd
+        volumeMounts:
+          - name: nginx-log
+            mountPath: /var/log/nginx/
+          - name: fluentd-conf
+            mountPath: /fluentd/etc/
+
+      volumes:
+        - name: fluentd-conf
+          configMap: 
+            name: fluentd-conf
+        - name: nginx-log
+          emptyDir: {}
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: fluentd-conf
+data:
+  fluent.conf: |
+    <source>
+      @type tail
+      format nginx
+      tag nginx.access
+      path /var/log/nginx/access.log
+    </source>
+
+    <match **>
+      @type elasticsearch
+      logstash_format true
+      host elasticsearch
+      port 9200
+      index_name fluentd
+      type_name fluentd
+      flush_interval 1s
+    </match>
